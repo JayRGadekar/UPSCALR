@@ -1,0 +1,19 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  @apply bg-black text-white font-sans;
+}
+
+.glass-panel {
+  @apply rounded-3xl border border-gray-800 bg-black p-6 shadow-lg;
+}
+
+.glass-panel button {
+  @apply transition duration-200;
+}

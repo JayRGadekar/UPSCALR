@@ -1,0 +1,23 @@
+{
+  "hardware": {
+    "lowEndRam": 8,
+    "recommendedRam": 16,
+    "gpuRequired": false
+  },
+  "models": {
+    "recommendations": ["llama3-mini", "mistral-7b", "codellama-7b-instruct"],
+    "lazyLoad": true
+  },
+  "video": {
+    "defaultFactor": 2,
+    "maxQueueLength": 3,
+    "gpuHint": "Use '--gpu' flag for Real-ESRGAN when available"
+  },
+  "packaging": {
+    "electron": {
+      "windowsTarget": "nsis",
+      "macTarget": "dmg"
+    },
+    "bundleOllama": true
+  }
+}
