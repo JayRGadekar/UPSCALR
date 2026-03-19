@@ -1,0 +1,23 @@
+[
+  {
+    "name": "llama3-mini",
+    "size": "8B",
+    "recommendedMemory": 22000000000,
+    "description": "Smaller LLaMA3 variant optimized for 8GB systems",
+    "tags": ["chat", "code"]
+  },
+  {
+    "name": "mistral-7b",
+    "size": "7B",
+    "recommendedMemory": 24000000000,
+    "description": "Balanced general purpose model",
+    "tags": ["multitask"]
+  },
+  {
+    "name": "codellama-7b-instruct",
+    "size": "7B",
+    "recommendedMemory": 26000000000,
+    "description": "Code-focused LLM",
+    "tags": ["code", "assistant"]
+  }
+]
