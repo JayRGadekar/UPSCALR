@@ -3,18 +3,23 @@ import { useMemo, useState } from 'react';
 const VideoUpscalePanel = ({
   jobs = [],
   onStart,
-  demoAssets = [],
-  modelCatalog = [],
-  selectedModel,
-  onSelectModel,
-  onEnsureModel,
-  modelAvailability = new Set(),
+  currentModel,
   latestOutputPath
 }) => {
   const [mediaType, setMediaType] = useState('video');
-  const [factor, setFactor] = useState(2);
+  const [factor, setFactor] = useState(currentModel?.supportedFactors?.[0] || 4);
   const [inputPath, setInputPath] = useState('');
   const [useGpu, setUseGpu] = useState(true);
+
+  const queueSummary = useMemo(() => {
+    const running = jobs.filter((job) => job.status === 'running').length;
+    const completed = jobs.filter((job) => job.status === 'completed').length;
+    return {
+      total: jobs.length,
+      running,
+      completed
+    };
+  }, [jobs]);
 
   const handleDrop = (event) => {
     event.preventDefault();
@@ -25,173 +30,176 @@ const VideoUpscalePanel = ({
     }
   };
 
-  const handleDragOver = (event) => {
-    event.preventDefault();
-  };
-
-  const selectedModelMeta = useMemo(
-    () => modelCatalog.find((item) => item.name === selectedModel) || {},
-    [modelCatalog, selectedModel]
-  );
-
   const handleSubmit = (event) => {
-    event.preventDefault();
-    if (!inputPath || !selectedModel) {
+    event?.preventDefault();
+    if (!inputPath || !currentModel?.installed) {
       return;
     }
-    onStart({ inputPath, factor, useGpu, model: selectedModel, mediaType });
+
+    onStart({
+      inputPath,
+      factor,
+      useGpu,
+      mediaType
+    });
   };
 
-  const isModelInstalled = modelAvailability.has(selectedModel);
-
   return (
-    <div className="flex h-full flex-col p-8">
-      <div className="flex items-center justify-between">
+    <div className="flex h-full flex-col">
+      <div className="flex flex-wrap items-end justify-between gap-5">
         <div>
-          <h1 className="text-2xl font-semibold">Media Upscale</h1>
-          <p className="text-sm text-gray-500">
-            Choose image or video, pick the factor, and stream a model-powered upscale job.
-          </p>
+          <p className="text-[0.68rem] uppercase tracking-[0.38em] text-slate-400">Upscale</p>
+          <h2 className="mt-2 text-3xl font-semibold text-white">Drop a file and run.</h2>
         </div>
+
         <button
           onClick={handleSubmit}
-          className="rounded-2xl bg-gray-900 border border-gray-700 px-6 py-3 text-sm font-semibold text-white transition hover:bg-gray-700 disabled:bg-gray-800"
-          disabled={!inputPath || !selectedModel}
+          className="rounded-full bg-white px-6 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-100 disabled:cursor-not-allowed disabled:bg-white/20 disabled:text-white/50"
+          disabled={!inputPath || !currentModel?.installed}
         >
-          Start
+          {currentModel?.installed ? 'Upscale now' : 'Install model first'}
         </button>
       </div>
 
-      <div className="mt-4 flex items-center gap-3">
-        {['video', 'image'].map((type) => (
-          <button
-            key={type}
-            onClick={() => setMediaType(type)}
-            className={`rounded-2xl px-4 py-2 text-sm font-semibold transition ${
-              mediaType === type
-                ? 'bg-gray-900 text-white border border-gray-700'
-                : 'border border-gray-800 text-gray-400 hover:border-gray-700 hover:text-gray-200'
-            }`}
-          >
-            {type === 'video' ? 'Video' : 'Image'}
-          </button>
-        ))}
-        <span className="text-xs uppercase tracking-wider text-gray-600">Mode</span>
-      </div>
-
-      <div className="mt-4 flex items-center gap-6 text-sm">
-        <label className="flex items-center gap-2">
-          Factor
-          <select
-            value={factor}
-            onChange={(event) => setFactor(Number(event.target.value))}
-            className="rounded-xl border border-gray-800 bg-gray-900 px-3 py-1 text-sm text-white"
-          >
-            {[2, 4].map((option) => (
-              <option key={option} value={option}>
-                {option}x
-              </option>
+      <div className="mt-6 grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px]">
+        <div className="rounded-[30px] border border-white/10 bg-slate-950/60 p-5">
+          <div className="flex flex-wrap items-center gap-3">
+            {['video', 'image'].map((type) => (
+              <button
+                key={type}
+                type="button"
+                onClick={() => setMediaType(type)}
+                className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+                  mediaType === type
+                    ? 'bg-cyan-300 text-slate-950'
+                    : 'border border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'
+                }`}
+              >
+                {type === 'video' ? 'Video' : 'Image'}
+              </button>
             ))}
-          </select>
-        </label>
-        <label className="flex items-center gap-2 text-gray-500">
-          <input type="checkbox" checked={useGpu} onChange={() => setUseGpu((prev) => !prev)} />
-          Use GPU
-        </label>
-        <span className="text-xs uppercase tracking-wider text-gray-600">Factor</span>
-      </div>
+          </div>
 
-      <form
-        onSubmit={handleSubmit}
-        onDrop={handleDrop}
-        onDragOver={handleDragOver}
-        className="mt-6 rounded-2xl border border-dashed border-gray-800 bg-gray-950 p-6 text-sm text-gray-400"
-      >
-        <label className="flex flex-col gap-1 text-xs uppercase tracking-wider text-gray-600">
-          Drop file or paste path
-        </label>
-        <input
-          value={inputPath}
-          onChange={(event) => setInputPath(event.target.value)}
-          placeholder="/path/to/clip.mp4"
-          className="mt-1 w-full rounded-xl border border-gray-800 bg-gray-900 px-4 py-3 text-sm text-white outline-none focus:border-gray-700 hover:border-gray-700"
-        />
-        <p className="mt-2 text-xs text-gray-600">
-          Drag from Finder / Explorer (paths are captured when running inside Electron).
-        </p>
-      </form>
-
-      <div className="mt-6 flex items-center gap-3">
-        <div className="flex-1">
-          <p className="text-xs uppercase tracking-wider text-gray-600">Model</p>
-          <select
-            value={selectedModel}
-            onChange={(event) => onSelectModel(event.target.value)}
-            className="mt-2 w-full rounded-2xl border border-gray-800 bg-gray-900 px-4 py-3 text-sm text-white outline-none"
+          <form
+            onSubmit={handleSubmit}
+            onDrop={handleDrop}
+            onDragOver={(event) => event.preventDefault()}
+            className="mt-5 rounded-[28px] border border-dashed border-cyan-300/20 bg-cyan-300/[0.04] p-5"
           >
-            {modelCatalog.map((model) => (
-              <option key={model.name} value={model.name}>
-                {model.label}
-              </option>
-            ))}
-          </select>
-          <p className="mt-2 text-xs text-gray-600">{selectedModelMeta.description}</p>
+            <label className="text-[0.68rem] uppercase tracking-[0.34em] text-slate-500">Input path</label>
+            <input
+              value={inputPath}
+              onChange={(event) => setInputPath(event.target.value)}
+              placeholder="/Users/you/Movies/source.mov"
+              className="mt-3 w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-4 text-sm text-white outline-none transition focus:border-cyan-300/40 hover:border-white/20"
+            />
+          </form>
+
+          <div className="mt-5 grid gap-4 md:grid-cols-2">
+            <label className="rounded-[24px] border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
+              <span className="text-[0.68rem] uppercase tracking-[0.34em] text-slate-500">Scale</span>
+              <select
+                value={factor}
+                onChange={(event) => setFactor(Number(event.target.value))}
+                className="mt-3 w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none"
+              >
+                {(currentModel?.supportedFactors || [4]).map((option) => (
+                  <option key={option} value={option}>
+                    {option}x
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <div className="rounded-[24px] border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
+              <span className="text-[0.68rem] uppercase tracking-[0.34em] text-slate-500">Mode</span>
+              <button
+                type="button"
+                onClick={() => setUseGpu((prev) => !prev)}
+                className="mt-3 flex w-full items-center justify-between rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-left text-white transition hover:border-cyan-300/30"
+              >
+                <span>{useGpu ? 'GPU' : 'CPU'}</span>
+                <span className="text-xs uppercase tracking-[0.28em] text-slate-400">{useGpu ? 'Fast' : 'Fallback'}</span>
+              </button>
+            </div>
+          </div>
         </div>
-        <button
-          type="button"
-          onClick={() => onEnsureModel(selectedModel)}
-          className="h-fit rounded-2xl border border-gray-700 bg-gray-900 px-4 py-2 text-xs font-semibold uppercase tracking-wider transition hover:bg-gray-800"
-        >
-          {isModelInstalled ? 'Downloaded' : 'Download'}
-        </button>
-      </div>
 
-      <div className="mt-4 grid gap-2 text-xs text-gray-600">
-        {demoAssets.map((asset) => (
-          <button
-            key={asset.path}
-            type="button"
-            onClick={() => {
-              setInputPath(asset.path);
-              setMediaType(asset.type);
-            }}
-            className="flex items-center justify-between rounded-xl border border-gray-800 bg-gray-900 px-4 py-3 text-sm text-gray-300 transition hover:border-gray-700 hover:bg-gray-800"
-          >
-            <span>{asset.label}</span>
-            <span className="text-[0.6rem] uppercase tracking-[0.4em] text-gray-600">Demo</span>
-          </button>
-        ))}
-      </div>
-
-      {latestOutputPath && (
-        <div className="mt-6 rounded-2xl border border-gray-700 bg-gray-900 p-4 text-sm text-gray-300">
-          Done! Saved to <span className="font-semibold text-white">{latestOutputPath}</span>
-        </div>
-      )}
-
-      <div className="mt-6 flex-1 overflow-auto rounded-2xl border border-gray-800 bg-gray-950 p-4 text-sm">
-        {jobs.length === 0 ? (
-          <p className="text-gray-600">Queue is empty.</p>
-        ) : (
-          jobs.map((job) => (
-            <div key={job.jobId} className="space-y-1 border-b border-gray-800 pb-3 last:border-none last:pb-0">
-              <div className="flex items-center justify-between text-gray-500">
-                <span>{job.payload?.inputPath || 'unknown'}</span>
-                <span className="text-xs">{job.status}</span>
+        <div className="space-y-4">
+          <div className="rounded-[28px] border border-white/10 bg-white/5 p-5">
+            <p className="text-[0.68rem] uppercase tracking-[0.34em] text-slate-500">Status</p>
+            <div className="mt-4 grid grid-cols-3 gap-3 text-center">
+              <div className="rounded-2xl bg-black/20 px-3 py-4">
+                <div className="text-2xl font-semibold text-white">{queueSummary.total}</div>
+                <div className="mt-1 text-[0.68rem] uppercase tracking-[0.28em] text-slate-500">Total</div>
               </div>
-              <div className="h-2 rounded-full bg-gray-800">
-                <div
-                  className="h-full rounded-full bg-white transition-all"
-                  style={{ width: `${job.progress ?? 0}%` }}
-                />
+              <div className="rounded-2xl bg-black/20 px-3 py-4">
+                <div className="text-2xl font-semibold text-white">{queueSummary.running}</div>
+                <div className="mt-1 text-[0.68rem] uppercase tracking-[0.28em] text-slate-500">Running</div>
               </div>
-              <div className="text-xs text-gray-600">
-                Model: {job.payload?.model || 'default'} · Factor: {job.payload?.factor}x · GPU:{' '}
-                {job.payload?.useGpu ? 'yes' : 'no'}
+              <div className="rounded-2xl bg-black/20 px-3 py-4">
+                <div className="text-2xl font-semibold text-white">{queueSummary.completed}</div>
+                <div className="mt-1 text-[0.68rem] uppercase tracking-[0.28em] text-slate-500">Done</div>
               </div>
             </div>
-          ))
-        )}
+          </div>
+
+          <div className="rounded-[28px] border border-white/10 bg-white/5 p-5">
+            <p className="text-[0.68rem] uppercase tracking-[0.34em] text-slate-500">Output</p>
+            <div className="mt-4 rounded-2xl bg-black/20 p-4 text-sm text-slate-300">
+              {latestOutputPath || 'Nothing saved yet.'}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-6 rounded-[30px] border border-white/10 bg-slate-950/60 p-5">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-[0.68rem] uppercase tracking-[0.34em] text-slate-500">Queue</p>
+            <h3 className="mt-2 text-xl font-semibold text-white">Jobs</h3>
+          </div>
+        </div>
+
+        <div className="mt-4 space-y-4">
+          {jobs.length === 0 ? (
+            <div className="rounded-2xl border border-white/10 bg-black/20 p-5 text-sm text-slate-400">
+              No jobs yet.
+            </div>
+          ) : (
+            jobs.map((job) => (
+              <article key={job.jobId} className="rounded-[24px] border border-white/10 bg-black/20 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium text-white">{job.payload?.inputPath || 'unknown input'}</p>
+                    <p className="mt-1 text-xs uppercase tracking-[0.28em] text-slate-500">{job.status}</p>
+                  </div>
+                  <div className="text-right text-xs text-slate-400">
+                    <div>{job.payload?.factor}x</div>
+                    <div className="mt-1">{job.payload?.useGpu ? 'GPU' : 'CPU'}</div>
+                  </div>
+                </div>
+
+                <div className="mt-4 h-2 rounded-full bg-white/10">
+                  <div
+                    className="h-full rounded-full bg-cyan-300 transition-all"
+                    style={{ width: `${job.progress ?? 0}%` }}
+                  />
+                </div>
+                {job.error && (
+                  <p className="mt-3 text-xs text-rose-300">{job.error}</p>
+                )}
+                {job.logs?.length > 0 && (
+                  <div className="mt-3 space-y-1 text-xs text-slate-500">
+                    {job.logs.slice(0, 2).map((line, index) => (
+                      <p key={`${job.jobId}-${index}`}>{line}</p>
+                    ))}
+                  </div>
+                )}
+              </article>
+            ))
+          )}
+        </div>
       </div>
     </div>
   );

@@ -35,7 +35,7 @@ app.get('/plugins', (req, res) => {
 
 app.use('/models', createModelRouter({ modelManager, resourceManager }));
 app.use('/chat', createChatRouter({ modelManager, chatBroadcaster }));
-app.use('/video', createVideoRouter({ videoQueue }));
+app.use('/video', createVideoRouter({ videoQueue, modelManager }));
 
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server, path: '/chat-stream' });

@@ -1,23 +1,22 @@
 [
   {
-    "name": "llama3-mini",
-    "size": "8B",
-    "recommendedMemory": 22000000000,
-    "description": "Smaller LLaMA3 variant optimized for 8GB systems",
-    "tags": ["chat", "code"]
-  },
-  {
-    "name": "mistral-7b",
-    "size": "7B",
-    "recommendedMemory": 24000000000,
-    "description": "Balanced general purpose model",
-    "tags": ["multitask"]
-  },
-  {
-    "name": "codellama-7b-instruct",
-    "size": "7B",
-    "recommendedMemory": 26000000000,
-    "description": "Code-focused LLM",
-    "tags": ["code", "assistant"]
+    "name": "realesrgan-x4plus",
+    "label": "Real-ESRGAN x4+",
+    "size": "Official macOS runtime bundle",
+    "recommendedMemory": 8589934592,
+    "description": "Official Real-ESRGAN general-purpose upscaler from the macOS ncnn release.",
+    "tags": ["video", "image", "2x", "3x", "4x", "official"],
+    "runtime": "realesrgan-ncnn",
+    "speed": "balanced",
+    "runnable": true,
+    "supportedFactors": [2, 3, 4],
+    "cliModelName": "realesrgan-x4plus",
+    "source": {
+      "type": "github-release-zip",
+      "repo": "xinntao/Real-ESRGAN",
+      "tag": "v0.2.5.0",
+      "asset": "realesrgan-ncnn-vulkan-20220424-macos.zip",
+      "browserDownloadUrl": "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.5.0/realesrgan-ncnn-vulkan-20220424-macos.zip"
+    }
   }
 ]

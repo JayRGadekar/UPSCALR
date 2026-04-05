@@ -6,11 +6,18 @@ function createModelRouter({ modelManager, resourceManager }) {
   router.get('/', async (req, res) => {
     const models = await modelManager.listModels();
     const stats = await resourceManager.getStats();
+    const activeModel = modelManager.getActiveModel();
     res.json({
       models,
-      activeModel: modelManager.getActiveModel(),
+      activeModel,
       resourceStats: stats,
-      recommendation: modelManager.getModelMetadata(resourceManager.suggestModel(models)?.name)
+      library: {
+        total: models.length,
+        installed: models.filter((model) => model.installed).length,
+        active: activeModel,
+        modelsRoot: modelManager.getModelsRoot()
+      },
+      storage: modelManager.getStoragePreferences()
     });
   });
 
@@ -19,8 +26,27 @@ function createModelRouter({ modelManager, resourceManager }) {
     if (!model) {
       return res.status(400).json({ error: 'model is required' });
     }
-    const metadata = await modelManager.pullModel(model);
-    res.json({ model: metadata });
+    try {
+      const download = modelManager.queueModelDownload(model);
+      res.status(202).json({ download });
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
+  });
+
+  router.post('/storage', async (req, res) => {
+    const modelsRoot = req.body?.modelsRoot;
+    try {
+      const storage = await modelManager.setModelsRoot(modelsRoot);
+      const models = await modelManager.listModels();
+      res.json({
+        storage,
+        models,
+        activeModel: modelManager.getActiveModel()
+      });
+    } catch (error) {
+      res.status(400).json({ error: error.message });
+    }
   });
 
   router.post('/select', async (req, res) => {

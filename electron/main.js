@@ -1,10 +1,10 @@
-const { app, BrowserWindow, Menu } = require('electron');
+const { app, BrowserWindow, Menu, dialog, ipcMain } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
-const isDev = require('electron-is-dev');
 
 let mainWindow;
 let backendProcess;
+const isDev = !app.isPackaged;
 
 const createWindow = () => {
   mainWindow = new BrowserWindow({
@@ -12,17 +12,18 @@ const createWindow = () => {
     height: 900,
     minWidth: 800,
     minHeight: 600,
+    backgroundColor: '#07111f',
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      enableRemoteModule: false
+      enableRemoteModule: false,
+      preload: path.join(__dirname, 'preload.js')
     },
     icon: path.join(__dirname, '../assets/icon.png')
   });
-
   if (isDev) {
     mainWindow.loadURL('http://localhost:5174');
-    mainWindow.webContents.openDevTools();
   } else {
     mainWindow.loadFile(path.join(__dirname, '../frontend/dist/index.html'));
   }
@@ -31,6 +32,18 @@ const createWindow = () => {
     mainWindow = null;
   });
 };
+
+ipcMain.handle('vllama:choose-directory', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openDirectory', 'createDirectory']
+  });
+
+  if (result.canceled) {
+    return null;
+  }
+
+  return result.filePaths[0] || null;
+});
 
 const startBackend = () => {
   const backendPath = path.join(__dirname, '../backend/src/server.js');
@@ -46,7 +59,9 @@ const startBackend = () => {
 };
 
 app.on('ready', () => {
-  startBackend();
+  if (!isDev) {
+    startBackend();
+  }
   createWindow();
   createMenu();
 });

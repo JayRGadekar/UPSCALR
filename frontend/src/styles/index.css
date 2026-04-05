@@ -4,16 +4,59 @@
 
 :root {
   color-scheme: dark;
+  font-family: 'Avenir Next', 'SF Pro Display', 'Segoe UI', sans-serif;
+  background:
+    radial-gradient(circle at top left, rgba(34, 211, 238, 0.14), transparent 32%),
+    radial-gradient(circle at top right, rgba(59, 130, 246, 0.18), transparent 28%),
+    linear-gradient(135deg, #020617 0%, #081120 38%, #030712 100%);
+}
+
+html,
+body,
+#root {
+  height: 100%;
 }
 
 body {
-  @apply bg-black text-white font-sans;
+  @apply bg-slate-950 text-white antialiased;
+  background:
+    radial-gradient(circle at top left, rgba(34, 211, 238, 0.12), transparent 30%),
+    radial-gradient(circle at top right, rgba(56, 189, 248, 0.08), transparent 24%),
+    linear-gradient(135deg, #020617 0%, #07111f 42%, #020617 100%);
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image: linear-gradient(rgba(148, 163, 184, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.05) 1px, transparent 1px);
+  background-size: 110px 110px;
+  mask-image: radial-gradient(circle at center, black 55%, transparent 90%);
+}
+
+.bg-app {
+  background:
+    radial-gradient(circle at 10% 10%, rgba(34, 211, 238, 0.14), transparent 24%),
+    radial-gradient(circle at 88% 12%, rgba(59, 130, 246, 0.14), transparent 22%),
+    linear-gradient(140deg, rgba(2, 6, 23, 0.98), rgba(7, 17, 31, 0.98));
 }
 
 .glass-panel {
-  @apply rounded-3xl border border-gray-800 bg-black p-6 shadow-lg;
+  @apply rounded-[32px] border border-white/10 bg-white/[0.06] p-6 shadow-[0_30px_80px_rgba(2,6,23,0.45)] backdrop-blur-xl;
 }
 
-.glass-panel button {
+.glass-toolbar {
+  @apply border border-white/10 bg-white/[0.07] shadow-[0_22px_60px_rgba(2,6,23,0.42)] backdrop-blur-xl;
+}
+
+.model-picker {
+  @apply relative min-w-[220px] rounded-full border border-white/10 bg-black/20 px-4 py-3 shadow-inner shadow-black/20;
+}
+
+button,
+select,
+input {
   @apply transition duration-200;
 }
