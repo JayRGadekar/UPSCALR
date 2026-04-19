@@ -11,6 +11,7 @@ __pycache__/
 *.pyc
 .pytest_cache/
 venv/
+
 .idea/
 *.swp
 *.swo
@@ -19,3 +20,4 @@ venv/
 out/
 .cache/
 .turbo/
+package-lock.json
