@@ -1,7 +1,10 @@
-const { spawn } = require('node:child_process');
+const { spawn, spawnSync } = require('node:child_process');
 const { randomUUID } = require('node:crypto');
 const os = require('node:os');
 const path = require('node:path');
+
+const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.bmp', '.tif', '.tiff']);
+const MEDIA_EXTENSION_PATTERN = 'png|jpg|jpeg|webp|bmp|tif|tiff|mp4|mov|mkv|avi|webm|m4v';
 
 class VideoQueue {
   constructor({
@@ -10,19 +13,24 @@ class VideoQueue {
   } = {}) {
     this.pythonEntry = pythonEntry;
     this.pythonBin = pythonBin;
+    this.pythonCommand = this._resolvePythonCommand();
     this.jobs = new Map();
   }
 
   enqueueJob(payload) {
+    const normalizedInputPath = this._normalizeInputPath(payload.inputPath);
+    const resolvedMediaType = this._resolveMediaType(normalizedInputPath, payload.mediaType);
     const jobId = randomUUID();
-    const parsed = path.parse(payload.inputPath);
+    const parsed = path.parse(normalizedInputPath);
     const downloadsDir = path.join(os.homedir(), 'Downloads');
     const suffix = `${payload.model || 'local'}-${payload.factor || 2}x`;
-    const defaultExt = payload.mediaType === 'image' ? '.png' : '.mp4';
-    const outputExt = payload.mediaType === 'video' ? '.mp4' : parsed.ext || defaultExt;
+    const defaultExt = resolvedMediaType === 'image' ? '.png' : '.mp4';
+    const outputExt = resolvedMediaType === 'video' ? '.mp4' : parsed.ext || defaultExt;
     const outputName = `${parsed.name}-${suffix}${outputExt}`;
     const enhancedPayload = {
       ...payload,
+      inputPath: normalizedInputPath,
+      mediaType: resolvedMediaType,
       outputPath: path.join(downloadsDir, outputName),
       worker: 'python-realesrgan'
     };
@@ -46,7 +54,7 @@ class VideoQueue {
   _start(job) {
     job.status = 'running';
     const modelInfo = job.payload.modelInfo || {};
-    const args = [
+    const workerArgs = [
       this.pythonEntry,
       '--input',
       job.payload.inputPath,
@@ -69,7 +77,16 @@ class VideoQueue {
       job.payload.outputPath
     ];
 
-    const proc = spawn(this.pythonBin, args, {
+    const pythonArgs = [...this.pythonCommand.argsPrefix, ...workerArgs];
+
+    if (!this.pythonCommand.available) {
+      job.status = 'failed';
+      job.error = this.pythonCommand.error;
+      job.logs = [this.pythonCommand.error, ...job.logs].slice(0, 40);
+      return;
+    }
+
+    const proc = spawn(this.pythonCommand.bin, pythonArgs, {
       env: process.env,
       stdio: ['ignore', 'pipe', 'pipe']
     });
@@ -112,11 +129,96 @@ class VideoQueue {
       job.status = code === 0 ? 'completed' : 'failed';
       job.progress = code === 0 ? 100 : job.progress;
       if (code !== 0) {
-        job.error = `Worker exited with code ${code}`;
+        const missingPythonHint = job.logs.some((line) => /python was not found|app execution aliases/i.test(line));
+        job.error = missingPythonHint
+          ? 'Python is not installed or not available in PATH. Install Python 3 and restart the app.'
+          : `Worker exited with code ${code}`;
       }
     });
 
     job.process = proc;
+  }
+
+  _resolvePythonCommand() {
+    if (this.pythonBin && this._commandWorks(this.pythonBin, ['--version'])) {
+      return {
+        available: true,
+        bin: this.pythonBin,
+        argsPrefix: []
+      };
+    }
+
+    const candidates = process.platform === 'win32'
+      ? [
+          { bin: 'py', argsPrefix: ['-3'], probeArgs: ['-3', '--version'] },
+          { bin: 'py', argsPrefix: [], probeArgs: ['--version'] },
+          { bin: 'python', argsPrefix: [], probeArgs: ['--version'] },
+          { bin: 'python3', argsPrefix: [], probeArgs: ['--version'] }
+        ]
+      : [
+          { bin: 'python3', argsPrefix: [], probeArgs: ['--version'] },
+          { bin: 'python', argsPrefix: [], probeArgs: ['--version'] }
+        ];
+
+    for (const candidate of candidates) {
+      if (this._commandWorks(candidate.bin, candidate.probeArgs)) {
+        return {
+          available: true,
+          bin: candidate.bin,
+          argsPrefix: candidate.argsPrefix
+        };
+      }
+    }
+
+    return {
+      available: false,
+      bin: this.pythonBin,
+      argsPrefix: [],
+      error: 'Python 3 is not available. Install Python and ensure `py -3` or `python` works from a terminal.'
+    };
+  }
+
+  _commandWorks(command, args) {
+    try {
+      const result = spawnSync(command, args, {
+        stdio: 'ignore',
+        shell: process.platform === 'win32'
+      });
+      return result.status === 0;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  _normalizeInputPath(inputPath) {
+    if (typeof inputPath !== 'string') {
+      return inputPath;
+    }
+
+    const flattened = inputPath.replace(/[\r\n]+/g, ' ').trim();
+    const unquoted = flattened.replace(/^['"]+|['"]+$/g, '');
+    const windowsWithExtMatch = unquoted.match(new RegExp(`[A-Za-z]:\\\\(?:[^<>:"/|?*\\r\\n]+\\\\)*[^<>:"/|?*\\r\\n]+\\.(?:${MEDIA_EXTENSION_PATTERN})`, 'i'));
+    const unixWithExtMatch = unquoted.match(new RegExp(`\\/(?:[^/\\0]+\\/)*[^/\\0]+\\.(?:${MEDIA_EXTENSION_PATTERN})`, 'i'));
+    const windowsPathMatch = unquoted.match(/[A-Za-z]:\\(?:[^<>:"/|?*\r\n]+\\)*[^<>:"/|?*\r\n]+/);
+    const unixPathMatch = unquoted.match(/\/(?:[^/\0]+\/)*[^/\0]+/);
+    const extracted = windowsWithExtMatch?.[0]
+      || unixWithExtMatch?.[0]
+      || windowsPathMatch?.[0]
+      || unixPathMatch?.[0]
+      || unquoted;
+
+    return path.normalize(extracted.trim());
+  }
+
+  _resolveMediaType(inputPath, requestedMediaType = 'video') {
+    const extension = path.extname(String(inputPath || '')).toLowerCase();
+    if (IMAGE_EXTENSIONS.has(extension)) {
+      return 'image';
+    }
+    if (requestedMediaType === 'image' || requestedMediaType === 'video') {
+      return requestedMediaType;
+    }
+    return 'video';
   }
 }
 

@@ -2,9 +2,9 @@
   {
     "name": "realesrgan-x4plus",
     "label": "Real-ESRGAN x4+",
-    "size": "Official macOS runtime bundle",
+    "size": "Official Real-ESRGAN runtime bundle",
     "recommendedMemory": 8589934592,
-    "description": "Official Real-ESRGAN general-purpose upscaler from the macOS ncnn release.",
+    "description": "Official Real-ESRGAN general-purpose upscaler using the ncnn runtime.",
     "tags": ["video", "image", "2x", "3x", "4x", "official"],
     "runtime": "realesrgan-ncnn",
     "speed": "balanced",

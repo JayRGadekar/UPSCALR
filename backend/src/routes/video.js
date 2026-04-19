@@ -1,11 +1,50 @@
 const express = require('express');
+const path = require('node:path');
+
+const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.bmp', '.tif', '.tiff']);
+const MEDIA_EXTENSION_PATTERN = 'png|jpg|jpeg|webp|bmp|tif|tiff|mp4|mov|mkv|avi|webm|m4v';
+
+function sanitizeInputPath(inputPath) {
+  if (typeof inputPath !== 'string') {
+    return inputPath;
+  }
+
+  const flattened = inputPath.replace(/[\r\n]+/g, ' ').trim();
+  const unquoted = flattened.replace(/^['"]+|['"]+$/g, '');
+
+  const windowsWithExtMatch = unquoted.match(new RegExp(`[A-Za-z]:\\\\(?:[^<>:"/|?*\\r\\n]+\\\\)*[^<>:"/|?*\\r\\n]+\\.(?:${MEDIA_EXTENSION_PATTERN})`, 'i'));
+  const unixWithExtMatch = unquoted.match(new RegExp(`\\/(?:[^/\\0]+\\/)*[^/\\0]+\\.(?:${MEDIA_EXTENSION_PATTERN})`, 'i'));
+  const windowsPathMatch = unquoted.match(/[A-Za-z]:\\(?:[^<>:"/|?*\r\n]+\\)*[^<>:"/|?*\r\n]+/);
+  const unixPathMatch = unquoted.match(/\/(?:[^/\0]+\/)*[^/\0]+/);
+  const extracted = windowsWithExtMatch?.[0]
+    || unixWithExtMatch?.[0]
+    || windowsPathMatch?.[0]
+    || unixPathMatch?.[0]
+    || unquoted;
+
+  return path.normalize(extracted.trim());
+}
+
+function resolveMediaType(inputPath, requestedMediaType = 'video') {
+  const extension = path.extname(String(inputPath || '')).toLowerCase();
+  if (IMAGE_EXTENSIONS.has(extension)) {
+    return 'image';
+  }
+  if (requestedMediaType === 'image' || requestedMediaType === 'video') {
+    return requestedMediaType;
+  }
+  return 'video';
+}
 
 function createVideoRouter({ videoQueue, modelManager }) {
   const router = express.Router();
 
   router.post('/upload', async (req, res) => {
     const { inputPath, factor = 4, useGpu = true, model = 'realesrgan-x4plus', mediaType = 'video', metadata = {} } = req.body;
-    if (!inputPath) {
+    const normalizedInputPath = sanitizeInputPath(inputPath);
+    const normalizedMediaType = resolveMediaType(normalizedInputPath, mediaType);
+
+    if (!normalizedInputPath) {
       return res.status(400).json({ error: 'inputPath is required' });
     }
 
@@ -28,11 +67,11 @@ function createVideoRouter({ videoQueue, modelManager }) {
     }
 
     const job = videoQueue.enqueueJob({
-      inputPath,
+      inputPath: normalizedInputPath,
       factor,
       useGpu,
       model,
-      mediaType,
+      mediaType: normalizedMediaType,
       metadata,
       modelInfo
     });

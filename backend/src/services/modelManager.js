@@ -11,14 +11,14 @@ const execFileAsync = promisify(execFile);
 class ModelManager {
   constructor({
     catalogPath = path.resolve(__dirname, '../../../shared/model-presets.json'),
-    settingsPath = path.join(os.homedir(), 'Library', 'Application Support', 'VLLAMA', 'settings.json'),
+    settingsPath,
     modelsRoot
   } = {}) {
     this.catalogPath = catalogPath;
-    this.settingsPath = settingsPath;
+    this.settingsPath = settingsPath || path.join(...this._resolveSettingsLocationSegments(), 'settings.json');
     this.settingsDir = path.dirname(this.settingsPath);
-    this.defaultModelsRoot = modelsRoot || path.join(os.homedir(), 'Library', 'Application Support', 'VLLAMA', 'models');
-    this.legacyModelsRoot = path.join(os.homedir(), 'Library', 'Application Support', 'UPSCALR', 'models');
+    this.defaultModelsRoot = modelsRoot || path.join(...this._resolveSettingsLocationSegments(), 'models');
+    this.legacyModelsRoot = path.join(...this._resolveLegacyLocationSegments(), 'models');
     this.catalog = this._loadCatalog();
     this.cached = [];
     this.activeModel = this.catalog[0]?.name ?? null;
@@ -234,7 +234,7 @@ class ModelManager {
 
   _decorateModel(model, installedModels) {
     const manifest = this._readManifest(model.name);
-    const installed = installedModels.has(model.name) || this._isManifestUsable(model, manifest);
+    const installed = this._isManifestUsable(model, manifest);
     return {
       ...model,
       installed,
@@ -268,6 +268,10 @@ class ModelManager {
     }
 
     if (model.runtime === 'realesrgan-ncnn') {
+      if (!this._isManifestCompatibleWithPlatform(manifest)) {
+        return false;
+      }
+
       return Boolean(
         manifest.executablePath
         && manifest.modelsPath
@@ -313,19 +317,22 @@ class ModelManager {
   }
 
   async _installRealEsrganBundle(model) {
-    const bundleDir = path.join(this.runtimeRoot, 'realesrgan-ncnn-v0.2.5.0-macos');
-    const zipPath = path.join(this.runtimeRoot, 'realesrgan-ncnn-vulkan-20220424-macos.zip');
-    const executablePath = path.join(bundleDir, 'realesrgan-ncnn-vulkan');
+    const runtimeConfig = this._resolveRealEsrganRuntimeConfig(model);
+    const bundleDir = path.join(this.runtimeRoot, runtimeConfig.bundleFolder);
+    const zipPath = path.join(this.runtimeRoot, runtimeConfig.assetName);
+    const executablePath = path.join(bundleDir, runtimeConfig.executableName);
     const modelsPath = path.join(bundleDir, 'models');
 
     if (!fs.existsSync(executablePath) || !fs.existsSync(modelsPath)) {
-      await this._downloadFile(model.source.browserDownloadUrl, zipPath, (progress) => {
+      await this._downloadFile(runtimeConfig.browserDownloadUrl, zipPath, (progress) => {
         this._setDownloadState(model.name, { progress: Math.round(progress * 90) });
       });
       this._setDownloadState(model.name, { progress: 90 });
       fs.mkdirSync(bundleDir, { recursive: true });
-      await execFileAsync('unzip', ['-o', zipPath, '-d', bundleDir]);
-      fs.chmodSync(executablePath, 0o755);
+      await this._extractArchive(zipPath, bundleDir);
+      if (process.platform !== 'win32') {
+        fs.chmodSync(executablePath, 0o755);
+      }
     }
 
     const modelDir = this._modelDirectory(model.name);
@@ -338,17 +345,127 @@ class ModelManager {
       modelsPath,
       cliModelName: model.cliModelName,
       supportedFactors: model.supportedFactors,
-      sourceUrl: model.source.browserDownloadUrl
+      sourceUrl: runtimeConfig.browserDownloadUrl,
+      platform: process.platform
     };
 
     fs.writeFileSync(path.join(modelDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
   }
 
+  async _extractArchive(zipPath, destination) {
+    const attempts = [];
+    const tryExtract = async (command, args) => {
+      try {
+        await execFileAsync(command, args);
+        return true;
+      } catch (error) {
+        attempts.push(`${command}: ${error.message}`);
+        return false;
+      }
+    };
+
+    const escapedZip = zipPath.replace(/'/g, "''");
+    const escapedDestination = destination.replace(/'/g, "''");
+    const expandArchive = `Expand-Archive -LiteralPath '${escapedZip}' -DestinationPath '${escapedDestination}' -Force`;
+
+    if (process.platform === 'win32') {
+      if (await tryExtract('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', expandArchive])) {
+        return;
+      }
+      if (await tryExtract('pwsh', ['-NoProfile', '-Command', expandArchive])) {
+        return;
+      }
+    }
+
+    if (await tryExtract('unzip', ['-o', zipPath, '-d', destination])) {
+      return;
+    }
+
+    if (await tryExtract('tar', ['-xf', zipPath, '-C', destination])) {
+      return;
+    }
+
+    throw new Error(`Could not extract model archive. Tried: ${attempts.join(' | ')}`);
+  }
+
   _deleteRealEsrganBundle() {
-    const bundleDir = path.join(this.runtimeRoot, 'realesrgan-ncnn-v0.2.5.0-macos');
-    const zipPath = path.join(this.runtimeRoot, 'realesrgan-ncnn-vulkan-20220424-macos.zip');
-    fs.rmSync(bundleDir, { recursive: true, force: true });
-    fs.rmSync(zipPath, { force: true });
+    const knownBundles = [
+      {
+        bundleDir: 'realesrgan-ncnn-v0.2.5.0-macos',
+        assetName: 'realesrgan-ncnn-vulkan-20220424-macos.zip'
+      },
+      {
+        bundleDir: 'realesrgan-ncnn-v0.2.5.0-windows',
+        assetName: 'realesrgan-ncnn-vulkan-20220424-windows.zip'
+      },
+      {
+        bundleDir: 'realesrgan-ncnn-v0.2.5.0-ubuntu',
+        assetName: 'realesrgan-ncnn-vulkan-20220424-ubuntu.zip'
+      }
+    ];
+
+    knownBundles.forEach((entry) => {
+      fs.rmSync(path.join(this.runtimeRoot, entry.bundleDir), { recursive: true, force: true });
+      fs.rmSync(path.join(this.runtimeRoot, entry.assetName), { force: true });
+    });
+  }
+
+  _resolveSettingsLocationSegments() {
+    if (process.platform === 'win32') {
+      return [os.homedir(), 'AppData', 'Roaming', 'VLLAMA'];
+    }
+    return [os.homedir(), 'Library', 'Application Support', 'VLLAMA'];
+  }
+
+  _resolveLegacyLocationSegments() {
+    if (process.platform === 'win32') {
+      return [os.homedir(), 'AppData', 'Roaming', 'UPSCALR'];
+    }
+    return [os.homedir(), 'Library', 'Application Support', 'UPSCALR'];
+  }
+
+  _resolveRealEsrganRuntimeConfig(model) {
+    const sharedSource = model.source || {};
+    const repo = sharedSource.repo || 'xinntao/Real-ESRGAN';
+    const tag = sharedSource.tag || 'v0.2.5.0';
+    const releaseBase = `https://github.com/${repo}/releases/download/${tag}`;
+
+    const map = {
+      win32: {
+        assetName: 'realesrgan-ncnn-vulkan-20220424-windows.zip',
+        bundleFolder: 'realesrgan-ncnn-v0.2.5.0-windows',
+        executableName: 'realesrgan-ncnn-vulkan.exe'
+      },
+      darwin: {
+        assetName: 'realesrgan-ncnn-vulkan-20220424-macos.zip',
+        bundleFolder: 'realesrgan-ncnn-v0.2.5.0-macos',
+        executableName: 'realesrgan-ncnn-vulkan'
+      },
+      linux: {
+        assetName: 'realesrgan-ncnn-vulkan-20220424-ubuntu.zip',
+        bundleFolder: 'realesrgan-ncnn-v0.2.5.0-ubuntu',
+        executableName: 'realesrgan-ncnn-vulkan'
+      }
+    };
+
+    const selected = map[process.platform] || map.darwin;
+    return {
+      ...selected,
+      browserDownloadUrl: `${releaseBase}/${selected.assetName}`
+    };
+  }
+
+  _isManifestCompatibleWithPlatform(manifest) {
+    if (manifest.platform) {
+      return manifest.platform === process.platform;
+    }
+
+    const executablePath = String(manifest.executablePath || '').toLowerCase();
+    if (process.platform === 'win32') {
+      return executablePath.endsWith('.exe');
+    }
+
+    return !executablePath.endsWith('.exe');
   }
 
   async _downloadFile(url, destination, onProgress) {
