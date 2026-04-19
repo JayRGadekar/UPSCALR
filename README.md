@@ -9,6 +9,7 @@ This repo hosts a modular desktop application that orchestrates local Ollama mod
 - **Shared Config**: Common types, hardware heuristics, and packaging instructions.
 
 ## Top-Level Layout
+
 ```
 /root/
 ├── frontend/          # React + Tailwind UI + renderer entry
@@ -22,3 +23,8 @@ This repo hosts a modular desktop application that orchestrates local Ollama mod
 ```
 
 Refer to `ARCHITECTURE.md` for the layered design and module map.
+
+## Development
+
+- `npm run dev` starts the desktop app in Electron on Windows and macOS.
+- `npm run dev:web` keeps the browser-only workflow if you want the Vite preview in a tab.

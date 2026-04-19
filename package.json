@@ -9,8 +9,9 @@
     "node": ">=18"
   },
   "scripts": {
-    "dev": "concurrently \"npm run dev --prefix backend\" \"npm run dev --prefix frontend\"",
-    "dev:electron": "env -u ELECTRON_RUN_AS_NODE concurrently \"npm run dev --prefix backend\" \"npm run dev --prefix frontend\" \"wait-on http://localhost:5174 && electron .\"",
+    "dev": "node ./scripts/dev-app.js",
+    "dev:web": "concurrently \"npm run dev --prefix backend\" \"npm run dev --prefix frontend\"",
+    "dev:electron": "node ./scripts/dev-app.js",
     "build": "npm run build --prefix frontend && npm run build --prefix backend",
     "build:electron": "npm run build --prefix frontend && electron-builder",
     "dist": "npm run build:electron",
